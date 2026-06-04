@@ -1,0 +1,118 @@
+<div class="prover-container">
+    <header class="prover-header">
+        <h1>Automated Theorem Prover</h1>
+        <p>Propositional Logic & Constraint Solver Engine (DLX)</p>
+    </header>
+
+    <main class="prover-workspace">
+        <section class="input-panel">
+            <div class="form-group example-selector">
+                <label for="example-dropdown">Load Example</label>
+                <select id="example-dropdown" [ngModel]="selectedExample" (ngModelChange)="onExampleChange($event)">
+                    @for (ex of examples; track ex.name) {
+                        <option [ngValue]="ex">{{ ex.name }}</option>
+                    }
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="axioms">Theory Axioms (One per line)</label>
+                <div class="editor-wrapper">
+                    <div class="line-numbers" #lineNumbers>
+                        @for (line of lineNumbersArray(); track $index) {
+                            <div class="line-number">{{ $index + 1 }}</div>
+                        }
+                    </div>
+                    <textarea
+                            id="axioms"
+                            #textArea
+                            (scroll)="syncScroll($event, lineNumbers)"
+                            class="code-textarea"
+                            [ngModel]="axiomsText()"
+                            (ngModelChange)="axiomsText.set($event)"
+                            wrap="off"
+                            spellcheck="false"
+                            placeholder="e.g.,&#10;A IMPLIES B&#10;B IMPLIES C">
+                    </textarea>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="theorem">Theorem to Prove</label>
+                <input
+                        id="theorem"
+                        type="text"
+                        [ngModel]="theoremText()"
+                        (ngModelChange)="theoremText.set($event)"
+                        placeholder="e.g., A IMPLIES C" />
+            </div>
+
+            <button class="btn-prove" (click)="onProve()" [disabled]="loading()">
+                @if (loading()) {
+                    Evaluating in C++...
+                } @else {
+                    Run Theorem Prover
+                }
+            </button>
+        </section>
+
+        <section class="output-panel" [class.valid]="isOutputValid()" [class.invalid]="result() && !isOutputValid() && !isTimeout()" [class.timeout]="isTimeout()">
+            @if (!result() && !loading()) {
+                <div class="placeholder-result">
+                    <p>Enter axioms and a theorem, then click Run to evaluate the logic structural matrix.</p>
+                </div>
+            }
+
+            @if (loading()) {
+                <div class="placeholder-result">
+                    <p>Evaluating in C++ Engine...</p>
+                </div>
+            }
+
+            @if (result(); as res) {
+                <div class="result-content">
+                    @if (isTimeout()) {
+                        <div class="timeout-card">
+                            <h2>TIME LIMIT EXCEEDED</h2>
+                            <div class="metadata-bar">
+                                <span class="badge info">Engine: {{ res.solvedBy }}</span>
+                                <span class="badge warning">Matrix: {{ res.matrixRows }} x {{ res.matrixCols }}</span>
+                                <span class="badge success">Time: {{ res.executionTimeMs | number:'1.2-2' }} ms</span>
+                            </div>
+                            <p>The native engine could not explore the entire search space within the allocated time.</p>
+                            <div class="matrix-stats">
+                                <p><strong>Reason:</strong> Combinatorial explosion.</p>
+                            </div>
+                        </div>
+                    } @else {
+                        <div class="status-banner">
+                            <h2>{{ res.valid ? 'THEOREM VALID' : 'THEOREM INVALID' }}</h2>
+                            <div class="metadata-bar">
+                                <span class="badge info">Engine: {{ res.solvedBy }}</span>
+                                <span class="badge info">Matrix: {{ res.matrixRows }} x {{ res.matrixCols }}</span>
+                                <span class="badge success">Time: {{ res.executionTimeMs | number:'1.2-2' }} ms</span>
+                            </div>
+                            <p>{{ res.valid ? 'The formula is a logical consequence of the given theory.' : 'A counterexample was found in RAM.' }}</p>
+                        </div>
+
+                        @if (!res.valid && counterexampleArray().length > 0) {
+                            <div class="counterexample-section">
+                                <h3>Extracted Counterexample Model:</h3>
+                                <div class="matrix-box">
+                                    @for (entry of counterexampleArray(); track entry.key) {
+                                        <div class="variable-badge">
+                                            <span class="var-name">{{ entry.key }}</span>
+                                            <span class="var-val" [class.true]="entry.value" [class.false]="!entry.value">
+                                                {{ entry.value ? 'TRUE' : 'FALSE' }}
+                                            </span>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+            }
+        </section>
+    </main>
+</div>
