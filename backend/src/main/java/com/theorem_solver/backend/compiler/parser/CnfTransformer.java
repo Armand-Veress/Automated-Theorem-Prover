@@ -10,7 +10,7 @@ import java.util.Set;
 public class CnfTransformer {
     public CnfTransformer() {}
 
-    private LogicNode eliminateImplications (LogicNode node) {
+    public LogicNode eliminateImplications (LogicNode node) {
         if (node instanceof BinaryOpNode binaryNode) {
             LogicNode left = eliminateImplications(binaryNode.getLeft());
             LogicNode right = eliminateImplications(binaryNode.getRight());
@@ -32,15 +32,29 @@ public class CnfTransformer {
             return new NotNode(eliminateImplications(notNode.getOperand()));
         }
 
+        if (node instanceof QuantifierNode qNode) {
+            return new QuantifierNode(
+                    qNode.getQuantifier(),
+                    qNode.getVariable(),
+                    eliminateImplications(qNode.getBody())
+            );
+        }
+
         return node;
     }
 
-    private LogicNode applyDeMorgan(LogicNode node) {
+    public LogicNode applyDeMorgan(LogicNode node) {
         if(node instanceof NotNode notNode) {
             LogicNode inner = notNode.getOperand();
 
             if (inner instanceof NotNode doubleNot) {
                 return applyDeMorgan(doubleNot.getOperand());
+            }
+
+            if (inner instanceof QuantifierNode qNode) {
+                String flippedQuantifier = qNode.getQuantifier().equals("FORALL") ? "EXISTS" : "FORALL";
+                LogicNode negatedBody = applyDeMorgan(new NotNode(qNode.getBody()));
+                return new QuantifierNode(flippedQuantifier, qNode.getVariable(), negatedBody);
             }
 
             if (inner instanceof BinaryOpNode binaryNode) {
@@ -66,10 +80,18 @@ public class CnfTransformer {
             );
         }
 
+        if (node instanceof QuantifierNode qNode) {
+            return new QuantifierNode(
+                    qNode.getQuantifier(),
+                    qNode.getVariable(),
+                    applyDeMorgan(qNode.getBody())
+            );
+        }
+
         return node;
     }
 
-    private LogicNode distributeOrOverAnd(LogicNode node) {
+    public LogicNode distributeOrOverAnd(LogicNode node) {
         if (node instanceof BinaryOpNode binNode) {
             if (binNode.getOperator().equals("OR")) {
                 LogicNode left = distributeOrOverAnd(binNode.getLeft());

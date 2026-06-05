@@ -10,7 +10,7 @@ public class Grounder {
     private final int maxDepth;
 
     public Grounder(Set<String> constants, int maxDepth) {
-        this.domain = constants.isEmpty() ? Set.of("d") : constants;
+        this.domain = new HashSet<>(constants.isEmpty() ? Set.of("d") : constants);
         this.maxDepth = maxDepth;
     }
 
@@ -49,11 +49,17 @@ public class Grounder {
         if (quantifier.getQuantifier().equalsIgnoreCase("EXISTS")) {
             skolemCounter++;
             String skolemConst = "sk_" + varName + "_" + skolemCounter;
+
+            this.domain.add(skolemConst);
+
             return groundRecursive(substitute(body, varName, skolemConst), depth + 1);
         }
 
+
         List<LogicNode> expandedNodes = new ArrayList<>();
-        for (String constant : domain) {
+        List<String> currentDomainSnapshot = new ArrayList<>(this.domain);
+
+        for (String constant : currentDomainSnapshot) {
             expandedNodes.add(groundRecursive(substitute(body, varName, constant), depth + 1));
         }
         return combineNodes(expandedNodes, "AND");

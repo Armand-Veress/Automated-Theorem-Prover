@@ -52,6 +52,11 @@ export class ProverComponent {
         return !!res && !!res.counterexample && res.counterexample['TIMEOUT_EXCEEDED'] === true;
     });
 
+    isCrash = computed(() => {
+        const res = this.result();
+        return !!res && !!res.counterexample && res.counterexample['BACKEND_CRASH'] === true;
+    });
+
     counterexampleArray = computed<CounterexampleEntry[]>(() => {
         const res = this.result();
         if (!res || !res.counterexample) return [];

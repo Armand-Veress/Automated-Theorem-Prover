@@ -34,10 +34,13 @@ public class TheoremProverService {
             List<Token> tokens = new Lexer().tokenize(combinedFormula);
             LogicNode ast = new Parser(tokens).parse();
 
+            ast = transformer.eliminateImplications(ast);
+            ast = transformer.applyDeMorgan(ast);
+
             Set<String> constants = Extractors.findConstants(ast);
             ast = new Grounder(constants, 10).ground(ast);
 
-            LogicNode cnf = transformer.convertToCNF(ast);
+            LogicNode cnf = transformer.distributeOrOverAnd(ast);
             List<List<String>> clauses = transformer.extractClauses(cnf);
 
             UnitPropagator.Result propagationResult = UnitPropagator.optimizeCNF(clauses);
@@ -102,6 +105,7 @@ public class TheoremProverService {
             return new ProverResult(false, counterexample, log, "C++ Engine (DLX)", rows, maxCols, finalDuration);
 
         } catch (Throwable t) {
+            t.printStackTrace();
             double finalDuration = (System.nanoTime() - startTime) / 1_000_000.0;
             Map<String, Boolean> errorState = new HashMap<>();
             errorState.put("BACKEND_CRASH", true);

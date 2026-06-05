@@ -84,6 +84,19 @@
                                 <p><strong>Reason:</strong> Combinatorial explosion.</p>
                             </div>
                         </div>
+                    } @else if(isCrash()) {
+                        <div class="timeout-card">
+                            <h2>System Error</h2>
+                            <div class="metadata-bar">
+                                <span class="badge info">Engine: {{ res.solvedBy }}</span>
+                                <span class="badge warning">Matrix: {{ res.matrixRows }} x {{ res.matrixCols }}</span>
+                                <span class="badge success">Time: {{ res.executionTimeMs | number:'1.2-2' }} ms</span>
+                            </div>
+                            <p>The backend service encountered an unexpected exception while evaluating the input formula.</p>
+                            <div class="matrix-stats">
+                                <p><strong>Reason:</strong> Internal processing fault or unhandled syntax state.</p>
+                            </div>
+                        </div>
                     } @else {
                         <div class="status-banner">
                             <h2>{{ res.valid ? 'THEOREM VALID' : 'THEOREM INVALID' }}</h2>
