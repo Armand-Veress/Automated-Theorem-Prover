@@ -7,15 +7,16 @@ It uses a **Java Spring Boot** backend to parse theorems and reduce them into Ex
 which are then solved via **JNI** using a **C++** implementation of **Knuth's DLX (Dancing Links X algorithm)**.
 The results are displayed through a responsive Angular interface.
 
-[image]
+<img width="957" height="500" alt="image" src="https://github.com/user-attachments/assets/4b02f4c1-d31a-43a3-a352-33cd0e7efa8c" />
+
 
 ## How to run
 
 **Prerequisites:** Docker <br>
 Clone repository, navigate to the root directory and run the following command:
-```
+
     docker-compose up --build -d
-```
+
 The graphical interface is exposed on **http://localhost:4200**. The Spring Boot REST API binds to port **8080**.
 
 ---
@@ -25,8 +26,8 @@ The graphical interface is exposed on **http://localhost:4200**. The Spring Boot
 ### 2.1. Formal Context and Problem Space
 
 The application functions as a refutation-based theorem prover. It determines whether a specific logical theorem is a logical consequence of a set of given axioms by attempting to find a contradiction. <br>
-The system operates strictly within Propositional Logic (Zero-order logic), **reducing a Boolean Satisfiability Problem (SAT) to an Exact Cover problem**. Both SAT and Exact Cover belong to the NP-complete complexity class, meaning the worst-case execution time grows exponentially, bounded by **$O(2^n)$**. <br>
-While the input syntax accepts First-Order Logic quantifiers ($\forall$, $\exists$), the system does not evaluate infinite domains. It expands these quantifiers over finite, predefined domains, reducing them to standard propositional logic before execution.
+The system operates strictly within Propositional Logic (Zero-order logic), **reducing a Boolean Satisfiability Problem (SAT) to an Exact Cover problem**. Since both SAT and Exact Cover belong to the NP-complete complexity class, yhis means the worst-case execution time grows exponentially, bounded by **$O(2^n)$**. <br>
+While the input syntax accepts First-Order Logic quantifiers ($\forall$, $\exists$), the system utilizes Skolemization and dynamic domain instantiation to reduce first-order logic into standard propositional logic before execution.
 
 ---
 
@@ -38,9 +39,9 @@ While the input syntax accepts First-Order Logic quantifiers ($\forall$, $\exist
 * **Infrastructure:** Orchestrated into containers with docker-compose
 
 **Java-C++ Memory Interoperability (NativeInterop):**
-Transferring complex objects (like Java Abstract Syntax Trees or 2D arrays) to C++ incurs severe serialization overhead. To achieve minimal-copy overhead, the Java backend flattens the 2D Exact Cover matrix into a 1D primitive `int` array. <br>
+Transferring complex objects (like Java Abstract Syntax Trees or 2D arrays) to C++ can cause significant serialization overhead. To achieve minimal-copy overhead, the Java backend flattens the 2D Exact Cover matrix into a 1D primitive `int` array. <br>
 
-Unlike alternative DLX implementations that use `-1` delimiters to separate rows in a 1D sequence, this architecture relies on a strictly rectangular, fixed-width grid (passing the column count explicitly alongside the array). This approach guarantees predictable memory allocation, eliminates conditional branching during C++ parsing, and maximizes CPU cache alignment. <br>
+Unlike alternative DLX implementations that use `-1` delimiters to separate only the active nodes in a 1D sequence, this architecture relies on a strictly rectangular, fixed-width grid padded with zeros. This approach ensures the horizontal integrity of the matrix—the `0`s act as rigid spatial constraints, ensuring that row elements are well-aligned and linked without altering their sequential order. Furthermore, this rigid format guarantees predictable memory allocation, eliminates conditional branching during C++ parsing, and maximizes CPU cache alignment. <br>
 
 Using the Java Native Interface (JNI), the JVM passes a direct memory pointer to this array. The C++ engine reads the matrix structure directly from this shared memory space, constructs its internal structures, and writes the output back, avoiding costly garbage collection events.
 
@@ -51,100 +52,68 @@ Using the Java Native Interface (JNI), the JVM passes a direct memory pointer to
 1. **Lexical and Syntactic Analysis:**
     * The input string is broken down into discrete tokens (Lexer).
     * The tokens are evaluated against grammar rules to build an Abstract Syntax Tree (AST) representing the logical hierarchy (Parser).
-2. **Grounding:**
-    * The system extracts constants and expands quantified nodes (`FORALL`, `EXISTS`) into finite sets of `AND` and `OR` operations.
+2. **NNF Transformation & Grounding:**
+    * The AST is first converted to Negation Normal Form (NNF) by eliminating implications and applying De Morgan's laws (pushing negations down). Existential quantifiers (`EXISTS`) are Skolemized to generate new constants dynamically, and universal quantifiers (`FORALL`) are expanded over this dynamic domain.
 3. **CNF Transformation:**
-    * The AST is flattened into Conjunctive Normal Form (CNF) by eliminating implications, applying De Morgan's laws (pushing negations down), and distributing disjunctions over conjunctions. The result is a flat list of clauses.
+    * Disjunctions are distributed over conjunctions. The result is a flat list of clauses.
 4. **Unit Propagation:**
-    * Before generating the matrix, the system scans the CNF for unit clauses (clauses with only one literal). It forces these assignments and mathematically simplifies the remaining clauses.
+    * Before generating the matrix, the system scans the CNF for unit clauses (clauses with only one literal). It forces these assignments and mathematically simplifies the remaining clauses, potentially short-circuiting trivial contradictions without calling the native engine.
 5. **Matrix Generation:**
     * The CNF list is mapped into an Exact Cover matrix. Variables and clauses are mapped to columns. Truth assignments are mapped to rows. A `1` is placed where a specific assignment satisfies a specific constraint.
 6. **Native Execution and Interpretation:**
-    * The C++ module algorithm searches for a subset of rows that satisfy all constraints.
+    * The C++ module algorithm backtrack-searches for a subset of rows that satisfy all constraints.
 
 ---
 
-### 2.4. Native C++ Engine: Donald Knuth's DLX
-
-**Matrix Format and Data Structure:**
-The 1D array received from Java is reconstructed in C++ into a highly sparse, toroidal doubly linked list. Every node in the matrix possesses four pointers (`up`, `down`, `left`, `right`). 
-* Columns represent constraints (variables to be assigned and clauses to be satisfied).
-* Rows represent the possible state assignments.
-
-**Algorithm Dynamics:**
-The solver uses Depth-First Search (DFS). When a row is selected, the corresponding columns and conflicting rows are "covered" (removed from the matrix). DLX achieves this by unlinking nodes through simple pointer reassignment in $O(1)$ constant time. When backtracking, nodes are "uncovered" by restoring the pointers. No dynamic memory allocation or deletion occurs during the recursive search.
-
-**Heuristics and Kill Flags:**
-The algorithm employs the Minimum Remaining Values (MRV) heuristic, always choosing the column with the smallest number of 1's, optimizing considerably the backtracking process. <br>
-Due to the NP-complete nature of the problem, highly symmetric inputs cause deterministic combinatorial explosions. The C++ engine continually polls the execution time during the search, so that when the time limit of 2500 ms is exceeded, the search is stopped and a timeout state is returned to the JVM.
-
----
-
-## 3. Execution Trace: Quantifier Duality
+## 3. Example: Quantifier Duality
 
 **Theorem:** $\exists x P(x) \implies \neg \forall y \neg P(y)$
-**Domain:** $D = \{a, b\}$
 
-### 3.1. Refutation Setup
+### 3.1. Refutation Setup & NNF
 To prove validity, the system negates the theorem to search for a contradiction. Let $F$ be the evaluation formula:
 $$F = \neg (\exists x P(x) \implies \neg \forall y \neg P(y))$$
 
-**AST Construction:**
-```
-    NOT
-     |
-    IMPLIES
-     ├── EXISTS (x) -> P(x)
-     └── NOT
-          |
-         FORALL (y) -> NOT -> P(y)
-```
-### 3.2. Grounding (Domain Expansion)
-First-Order constructs are eliminated by instantiating variables over $D$:
-* $\exists x P(x) \longrightarrow P(a) \lor P(b)$
-* $\forall y \neg P(y) \longrightarrow \neg P(a) \land \neg P(b)$
+Before grounding, the parser applies implication elimination and De Morgan's laws to push the negation downwards (Negation Normal Form). This flips the initial quantifiers:
+$$F = \exists x P(x) \land \forall y \neg P(y)$$
 
-**Substituting:** Let $A = P(a)$ and $B = P(b)$.
-$$F = \neg ((A \lor B) \implies \neg (\neg A \land \neg B))$$
+### 3.2. Grounding (Skolemization & Dynamic Domain)
+First-Order constructs are eliminated dynamically:
+* **Existential Instantiation:** $\exists x P(x)$ generates a new Skolem constant `sk_x_1`, populating the dynamic domain $D = \{sk_{x_1}\}$. The node reduces to $P(sk_{x_1})$.
+* **Universal Instantiation:** $\forall y \neg P(y)$ expands over the new domain $D$, reducing to $\neg P(sk_{x_1})$.
 
-### 3.3. CNF Transformation
-The formula is flattened using strict rewrite rules:
+**Substituting:** Let $A = P(sk_{x_1})$.
+$$F = A \land \neg A$$
 
-1. **Implication ($X \implies Y \equiv \neg X \lor Y$):**
-   $$F = \neg (\neg (A \lor B) \lor \neg (\neg A \land \neg B))$$
-2. **De Morgan & Double Negation:**
-   $$F = \neg \neg (A \lor B) \land \neg \neg (\neg A \land \neg B)$$
-   $$F = (A \lor B) \land (\neg A \land \neg B)$$
-3. **Clause Extraction:**
-   $C_1: A \lor B$
+### 3.3. CNF Transformation & Unit Propagation
+The formula is already a pure contradiction in CNF:
+   $C_1: A$
    $C_2: \neg A$
-   $C_3: \neg B$
+
+*Note: The Java Unit Propagator immediately detects this contradiction. It identifies $C_1$ as a unit clause and forces $A = \text{True}$. Substituting this assignment into $C_2$ leaves an empty clause, proving mathematical impossibility. The Optimizer safely short-circuits, returning a 0x0 matrix and halting execution. To illustrate the C++ Native Engine mechanics, the theoretical Exact Cover matrix is mapped below.*
 
 ### 3.4. Exact Cover Matrix
 Clauses map to a binary grid. Columns = Constraints. Rows = State assignments.
-```
-    Variables: A, B  |  Clauses: C1, C2, C3
-    Columns:    [A] [B] [C1] [C2] [C3]
-    ------------------------------------
-    R1 (A=T):    1   0   1    0    0
-    R2 (A=F):    1   0   0    1    0
-    R3 (B=T):    0   1   1    0    0
-    R4 (B=F):    0   1   0    0    1
-```
-Array passed to C++: [1,0,1,0,0, 1,0,0,1,0, 0,1,0,1,0, 0,1,0,0,1]
+
+    Variables: A  |  Clauses: C1, C2
+    Columns:    [A] [C1] [C2]
+    -------------------------
+    R1 (A=T):    1   1    0
+    R2 (A=F):    1   0    1
+
+Array passed to C++: [1,1,0, 1,0,1]
 
 ### 3.5. Native DLX Search
 Algorithm X searches for a subset of rows covering every column exactly once.
 
-* **Iteration 1 (Target: C2):** MRV selects column [C2] (only 1 option).
-  -> Select R2 (A=F).
-  -> Cover [A], [C2]. Conflicting R1 is eliminated.
-* **Iteration 2 (Target: C3):** MRV selects column [C3] (only 1 option).
-  -> Select R4 (B=F).
-  -> Cover [B], [C3]. Conflicting R3 is eliminated.
-* **Iteration 3 (Target: C1):** Column [C1] requires R1 or R3. 
-  -> Both R1 and R3 are already eliminated. 
-  -> Available rows for [C1] = 0.
+* **Iteration 1 (Target: C1):** MRV selects column [C1] (only 1 option).
+  -> Select R1 (A=T).
+  -> Cover [A], [C1]. Conflicting R2 is eliminated.
+* **Iteration 2 (Target: C2):** Column [C2] requires R2. 
+  -> R2 is already eliminated. 
+  -> Available rows for [C2] = 0.
 
 **Conclusion:** DFS hits a deterministic dead end. Matrix has no Exact Cover. 
 $F$ is unsatisfiable $\implies$ The original theorem is valid.
+
+<img width="959" height="501" alt="image" src="https://github.com/user-attachments/assets/d0b15861-3748-4c88-91a2-ee68b50e78e7" />
+
