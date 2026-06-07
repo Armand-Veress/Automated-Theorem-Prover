@@ -1,7 +1,13 @@
 # Automated Theorem Prover
+
+---
+1. [Project description](#1-project-description)
+   - [HowToRun](#how-to-run)
+2. [Technical specifications](#2-technical-specifications)
+3. [Example: Quantifier Duality](#3-example-quantifier-duality)
 ---
 
-## 1. Architecture description
+## 1. Project description
 The project is a hybrid application designed to evaluate propositional logic formulas. <br>
 It uses a **Java Spring Boot** backend to parse theorems and reduce them into Exact Cover / CNF flat matrices, 
 which are then solved via **JNI** using a **C++** implementation of **Knuth's DLX (Dancing Links X algorithm)**.
